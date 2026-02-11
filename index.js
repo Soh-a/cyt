@@ -13,10 +13,15 @@ app.use(express.json());
 // ----------------------
 const serviceAccount = require('./firebaseServiceAccountKey.json');
 
+const admin = require("firebase-admin");
+
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://students-6e271-default-rtdb.firebaseio.com/"
+  credential: admin.credential.cert(
+    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  ),
+  databaseURL: process.env.https://students-6e271-default-rtdb.firebaseio.com.
 });
+
 
 const db = admin.database();
 
