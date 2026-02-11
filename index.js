@@ -26,6 +26,8 @@ const db = admin.database();
 const authRoutes = require('./routes/auth');
 const paymentRoutes = require('./routes/payment');
 const fineRoutes = require('./routes/fine');
+const studentsRoutes = require('./routes/students');
+app.use('/api/students', studentsRoutes);
 
 // ----------------------
 // Routes Mount
