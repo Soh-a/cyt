@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const admin = require("./firebase");
+const admin = require("firebase-admin"); // only once
 const cron = require('node-cron');
 
 const app = express();
@@ -11,17 +11,12 @@ app.use(express.json());
 // ----------------------
 // Firebase Initialization
 // ----------------------
-const serviceAccount = require('./firebaseServiceAccountKey.json');
-
-const admin = require("firebase-admin");
-
 admin.initializeApp({
   credential: admin.credential.cert(
     JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
   ),
-  databaseURL: process.env.https://students-6e271-default-rtdb.firebaseio.com.
+  databaseURL: process.env.FIREBASE_DB_URL
 });
-
 
 const db = admin.database();
 
@@ -32,25 +27,23 @@ const authRoutes = require('./routes/auth');
 const paymentRoutes = require('./routes/payment');
 const fineRoutes = require('./routes/fine');
 const studentsRoutes = require('./routes/students');
-app.use('/api/students', studentsRoutes);
 
 // ----------------------
 // Routes Mount
 // ----------------------
+app.use('/api/students', studentsRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/payment', paymentRoutes); // only ONCE
+app.use('/api/payment', paymentRoutes);
 app.use('/api/fine', fineRoutes);
 
 // ----------------------
 // AUTO APPLY FINE SYSTEM
-// Runs every day at 12:01 AM
 // ----------------------
 cron.schedule('1 0 * * *', async () => {
     console.log("Running daily fine check...");
 
     const ref = db.ref("/");
     const snapshot = await ref.once("value");
-
     const data = snapshot.val();
     if (!data) return;
 
@@ -87,7 +80,6 @@ cron.schedule('1 0 * * *', async () => {
 // Start Server
 // ----------------------
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
