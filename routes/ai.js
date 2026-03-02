@@ -16,7 +16,7 @@ router.post("/", async (req, res) => {
       return res.status(500).json({ error: "Gemini API key missing" });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: "POST",
