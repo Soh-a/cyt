@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const fetch = require("node-fetch"); // Node <18 only
+const fetch = require("node-fetch");
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
@@ -23,10 +23,18 @@ router.post("/", async (req, res) => {
     );
 
     const data = await response.json();
-    console.log("Gemini Raw Response:", data); // Debug
+    console.log("Gemini Response:", JSON.stringify(data, null, 2)); // Debug
 
-    // ✅ Correct path to the output text
-    const reply = data.candidates?.[0]?.content?.[0]?.text || "AI could not respond";
+    // Try multiple paths
+    let reply = "AI could not respond";
+    if (data.candidates?.length > 0) {
+      if (data.candidates[0].content?.length > 0) {
+        reply = data.candidates[0].content[0].text;
+      } else if (data.candidates[0].output?.length > 0) {
+        reply = data.candidates[0].output[0].text;
+      }
+    }
+
     res.json({ reply });
 
   } catch (err) {
