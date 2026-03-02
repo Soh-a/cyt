@@ -1,50 +1,38 @@
 // api/ai.js
-const express = require("express");
-const router = express.Router();
-const fetch = require("node-fetch");
+import express from "express";
+import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.GEMINI_API_KEY;
+const router = express.Router();
+
+// Initialize Gemini client
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY, // Ensure this is set in your environment
+});
 
 // POST /api/ai
 router.post("/", async (req, res) => {
   try {
-    // Get the user input
     const userText = req.body.message || req.body.text;
     if (!userText) {
       return res.status(400).json({ reply: "Message missing" });
     }
 
-    // Call Gemini 1.5 Flash model
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: userText }] }],
-          temperature: 0.7,        // Optional: adjust creativity
-          candidate_count: 1       // Return 1 response
-        })
-      }
-    );
+    // Call Gemini 3 Flash Preview model
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ parts: [{ text: userText }] }],
+      temperature: 0.7,
+      candidateCount: 1
+    });
 
-    const data = await response.json();
-    console.log("Gemini full response:", JSON.stringify(data, null, 2));
+    console.log("Gemini full response:", JSON.stringify(response, null, 2));
 
-    let reply = "AI could not respond";
-
-    // Robustly extract the text
-    if (data.candidates?.length > 0) {
-      const candidate = data.candidates[0];
-
-      if (candidate.content?.[0]?.parts?.[0]?.text) {
-        reply = candidate.content[0].parts[0].text;
-      } else if (candidate.output_text) {
-        reply = candidate.output_text;
-      } else if (typeof candidate === "string") {
-        reply = candidate;
-      }
-    }
+    // Extract AI reply safely
+    const reply =
+      response.candidates?.[0]?.content?.[0]?.parts?.[0]?.text ||
+      response.candidates?.[0]?.output_text ||
+      response.candidates?.[0]?.text ||
+      "AI could not respond";
 
     res.json({ reply });
 
@@ -54,4 +42,4 @@ router.post("/", async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
