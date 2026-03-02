@@ -27,6 +27,7 @@ const authRoutes = require('./routes/auth');
 const paymentRoutes = require('./routes/payment');
 const fineRoutes = require('./routes/fine');
 const studentsRoutes = require('./routes/students');
+const aiRoutes = require("./routes/ai");
 
 // ----------------------
 // Routes Mount
@@ -35,6 +36,7 @@ app.use('/api/students', studentsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/fine', fineRoutes);
+app.use("/api/ai", aiRoutes);
 
 // ----------------------
 // AUTO APPLY FINE SYSTEM
