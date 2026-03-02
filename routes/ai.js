@@ -11,26 +11,30 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: message }]
-            }
-          ]
-        })
-      }
-    );
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Gemini API key missing" });
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: message }]
+          }
+        ]
+      })
+    });
 
     const data = await response.json();
 
-    if (!response.ok) {
-      console.error("Gemini Error:", data);
-      return res.status(500).json({ error: "Gemini API error" });
+    if (data.error) {
+      console.error("Gemini Error:", data.error);
+      return res.status(500).json({ error: data.error.message });
     }
 
     const reply =
@@ -40,8 +44,8 @@ router.post("/", async (req, res) => {
     res.json({ reply });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error("AI SERVER ERROR:", err);
+    res.status(500).json({ error: "Internal AI error" });
   }
 });
 
