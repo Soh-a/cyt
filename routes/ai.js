@@ -3,7 +3,7 @@ import express from "express";
 import fetch from "node-fetch";
 
 const router = express.Router();
-const API_KEY = process.env.GOOGLE_API_KEY;
+const API_KEY = process.env.GEMINI_API_KEY;
 
 router.post("/", async (req, res) => {
   try {
