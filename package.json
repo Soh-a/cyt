@@ -8,7 +8,7 @@
     "express": "^5.1.0",
     "firebase-admin": "^13.6.0",
     "node-cron": "^4.2.1",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
     "@google/genai": "^0.1.3"
   },
   "devDependencies": {
