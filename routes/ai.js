@@ -1,23 +1,25 @@
+// routes/ai.js
 import express from "express";
-import { GoogleGenAI } from "@google/genai";
+import fetch from "node-fetch"; // or 'axios'
 
 const router = express.Router();
-const ai = new GoogleGenAI({});
+const API_KEY = process.env.GEMINI_API_KEY;
 
 router.post("/", async (req, res) => {
   try {
-    const { message } = req.body;
-    if (!message) return res.status(400).json({ reply: "No message provided" });
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ parts: [{ text: message }] }],
-    });
-
-    const reply =
-      response.candidates?.[0]?.content?.[0]?.text ||
-      "AI could not generate a response.";
-
+    const prompt = req.body.message;
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta2/models/gemini-2.5-flash:generateText?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: { text: prompt }
+        })
+      }
+    );
+    const data = await response.json();
+    const reply = data.candidates?.[0]?.output || "AI could not respond";
     res.json({ reply });
   } catch (err) {
     console.error(err);
