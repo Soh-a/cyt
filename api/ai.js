@@ -16,7 +16,7 @@ router.post("/", async (req, res) => {
 
     // Call Gemini 1.5 Flash model
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
