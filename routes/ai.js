@@ -1,21 +1,27 @@
+// route/ai.js
 const express = require("express");
 const router = express.Router();
 const fetch = require("node-fetch");
 
-const API_KEY = process.env.GEMINI_API_KEY;
+const API_KEY = process.env.GEMINI_API_KEY; // Make sure this is set in your environment
 
+// POST /api/ai
 router.post("/", async (req, res) => {
   try {
-    const prompt = req.body.message;
-    if (!prompt) return res.status(400).json({ reply: "No prompt provided" });
+    const userText = req.body.message || req.body.text;
 
+    if (!userText) {
+      return res.status(400).json({ reply: "Message missing" });
+    }
+
+    // Call Gemini 1.5 Flash
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta2/models/gemini-2.5-flash:generateText?key=${API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: { text: prompt },
+          contents: [{ parts: [{ text: userText }] }],
           temperature: 0.7,
           candidate_count: 1
         })
@@ -23,23 +29,27 @@ router.post("/", async (req, res) => {
     );
 
     const data = await response.json();
-    console.log("Gemini Response:", JSON.stringify(data, null, 2)); // Debug
+    console.log("Gemini full response:", JSON.stringify(data, null, 2));
 
-    // Try multiple paths
     let reply = "AI could not respond";
+
+    // Extract text safely from multiple possible paths
     if (data.candidates?.length > 0) {
-      if (data.candidates[0].content?.length > 0) {
-        reply = data.candidates[0].content[0].text;
-      } else if (data.candidates[0].output?.length > 0) {
-        reply = data.candidates[0].output[0].text;
+      const candidate = data.candidates[0];
+      if (candidate.content?.[0]?.parts?.[0]?.text) {
+        reply = candidate.content[0].parts[0].text;
+      } else if (candidate.output_text) {
+        reply = candidate.output_text;
+      } else if (typeof candidate === "string") {
+        reply = candidate;
       }
     }
 
     res.json({ reply });
 
   } catch (err) {
-    console.error("AI Route Error:", err);
-    res.status(500).json({ reply: "AI server error" });
+    console.error("AI SERVER ERROR:", err);
+    res.status(500).json({ reply: "Internal AI server error" });
   }
 });
 
