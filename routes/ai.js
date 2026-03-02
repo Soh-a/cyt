@@ -1,7 +1,6 @@
-// routes/ai.js
 const express = require("express");
-const fetch = require("node-fetch"); // if using Node >= 18, you can use global fetch
 const router = express.Router();
+const fetch = require("node-fetch"); // Node <18 only
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
@@ -15,17 +14,21 @@ router.post("/", async (req, res) => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: { text: prompt } })
+        body: JSON.stringify({
+          prompt: { text: prompt },
+          temperature: 0.7,
+          candidate_count: 1
+        })
       }
     );
 
     const data = await response.json();
+    console.log("Gemini Raw Response:", data); // Debug
 
-    // Debugging: log raw response if needed
-    console.log("Gemini Response:", data);
-
-    const reply = data.candidates?.[0]?.output || "AI could not respond";
+    // ✅ Correct path to the output text
+    const reply = data.candidates?.[0]?.content?.[0]?.text || "AI could not respond";
     res.json({ reply });
+
   } catch (err) {
     console.error("AI Route Error:", err);
     res.status(500).json({ reply: "AI server error" });
