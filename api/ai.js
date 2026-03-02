@@ -1,17 +1,13 @@
-import express from "express";
-import fetch from "node-fetch";
-
-const app = express();
-app.use(express.json());
-
-const GEMINI_API_KEY = "AIzaSyDc2LT4VfCMj9g3tHtXLoOusToDpgUvhTo";
-
-app.post("/ai", async (req, res) => {
+app.post("/api/ai", async (req, res) => {
   try {
-    const userText = req.body.text;
+    const userText = req.body.message || req.body.text;
+
+    if (!userText) {
+      return res.status(400).json({ reply: "Message missing" });
+    }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -27,16 +23,21 @@ app.post("/ai", async (req, res) => {
 
     const data = await response.json();
 
+    if (!response.ok) {
+      console.error("Gemini error:", data);
+      return res.status(500).json({
+        reply: "Gemini API failed"
+      });
+    }
+
     const reply =
       data.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "I couldn't generate a response.";
+      "No response generated";
 
     res.json({ reply });
-  } catch (err) {
-    res.status(500).json({ reply: "AI server error" });
-  }
-});
 
-app.listen(3000, () => {
-  console.log("Gemini AI running on port 3000");
+  } catch (err) {
+    console.error("AI SERVER ERROR:", err);
+    res.status(500).json({ reply: "Internal AI server error" });
+  }
 });
