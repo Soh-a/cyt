@@ -40,77 +40,7 @@ function resolveFeeRecordKey(feesData, targetMonth) {
 // POST /api/payment/order
 router.post("/order", async (req, res) => {
     try {
-        console.log("ORDER: request received");
-
-        const { mobile, month, session } = req.body;
-        const cleanMobile = sanitizeMobile(mobile);
-        const targetMonth = normalizeMonth(month);
-
-        // ...your existing validation...
-
-        const db = admin.database();
-        const studentRef = db.ref(`students/${cleanMobile}`);
-
-        console.log("ORDER: reading Firebase");
-
-        const snapshot = await studentRef.once("value");
-
-        console.log("ORDER: Firebase finished");
-
-        // ...keep your existing code...
-
-        console.log("ORDER: calling Razorpay");
-
-        const order = await razorpay.orders.create(options);
-
-        console.log("ORDER: Razorpay finished:", order.id);
-
-        return res.status(200).json({
-            success: true,
-            orderId: order.id,
-            amount: order.amount,
-            currency: order.currency,
-            keyId: process.env.RAZORPAY_KEY_ID
-        });
-
-    } catch (err) {
-        console.error("ORDER ERROR:", err);
-
-        return res.status(500).json({
-            success: false,
-            message: err.message || "Failed to initialize payment order."
-        });
-   
-            }
-        }
-
-        const targetKey = resolveFeeRecordKey(rawFees, targetMonth);
-        const currentFee = rawFees[targetKey] || {};
-        const isAlreadyPaid = currentFee.status === "paid" || currentFee.paymentStatus === "paid" || currentFee.isPaid === true;
-
-        if (isAlreadyPaid) {
-            return res.status(400).json({ success: false, message: "This month's fee is already paid." });
-        }
-
-        const monthlyFee = Number(student.monthlyfee || 0);
-        const lateFee = Number(currentFee.fine || currentFee.lateFee || 0);
-        const activityFee = Number(currentFee.activity || currentFee.activityFee || 0);
-        const convenienceFee = 15;
-
-        const totalRupees = monthlyFee + lateFee + activityFee + convenienceFee;
-        const totalPaise = totalRupees * 100;
-
-        const options = {
-            amount: totalPaise,
-            currency: "INR",
-            receipt: `rcpt_${cleanMobile}_${targetMonth}_${Date.now().toString().slice(-6)}`,
-            notes: {
-                studentMobile: cleanMobile,
-                month: targetMonth,
-                session: session || "2026-27"
-            }
-        };
-
+        // ...
         const order = await razorpay.orders.create(options);
 
         return res.status(200).json({
@@ -123,7 +53,10 @@ router.post("/order", async (req, res) => {
 
     } catch (err) {
         console.error("Order Creation Error:", err);
-        return res.status(500).json({ success: false, message: "Failed to initialize payment order with gateway." });
+        return res.status(500).json({
+            success: false,
+            message: "Failed to initialize payment order with gateway."
+        });
     }
 });
 
