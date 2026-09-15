@@ -12,7 +12,7 @@ const app = express();
 const allowedOrigins = [
     "http://localhost:3000",
     "http://127.0.0.1:5500",
-    process.env.feeguio.vercel.app // e.g., https://your-vercel-domain.vercel.app
+    process.env.FRONTEND_URL// e.g., https://your-vercel-domain.vercel.app
 ].filter(Boolean);
 
 app.use(cors({
