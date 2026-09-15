@@ -40,40 +40,47 @@ function resolveFeeRecordKey(feesData, targetMonth) {
 // POST /api/payment/order
 router.post("/order", async (req, res) => {
     try {
+        console.log("ORDER: request received");
+
         const { mobile, month, session } = req.body;
         const cleanMobile = sanitizeMobile(mobile);
         const targetMonth = normalizeMonth(month);
 
-        if (!cleanMobile || cleanMobile.length < 10) {
-            return res.status(400).json({ success: false, message: "Invalid student mobile number." });
-        }
-        if (!targetMonth) {
-            return res.status(400).json({ success: false, message: "Invalid fee month requested." });
-        }
+        // ...your existing validation...
 
         const db = admin.database();
         const studentRef = db.ref(`students/${cleanMobile}`);
+
+        console.log("ORDER: reading Firebase");
+
         const snapshot = await studentRef.once("value");
 
-        if (!snapshot.exists()) {
-            return res.status(404).json({ success: false, message: "Student record not found." });
-        }
+        console.log("ORDER: Firebase finished");
 
-        const student = snapshot.val();
-        const rawFees = student.fees || {};
+        // ...keep your existing code...
 
-        // Sequential Check
-        const targetIdx = MONTHS_ORDER.indexOf(targetMonth);
-        for (let i = 0; i < targetIdx; i++) {
-            const prevMonth = MONTHS_ORDER[i];
-            const prevKey = resolveFeeRecordKey(rawFees, prevMonth);
-            const prevFee = rawFees[prevKey] || {};
-            const isPaid = prevFee.status === "paid" || prevFee.paymentStatus === "paid" || prevFee.isPaid === true;
-            if (!isPaid) {
-                return res.status(400).json({ 
-                    success: false, 
-                    message: `Sequential Payment Violation: Must pay ${prevMonth.toUpperCase()} first.` 
-                });
+        console.log("ORDER: calling Razorpay");
+
+        const order = await razorpay.orders.create(options);
+
+        console.log("ORDER: Razorpay finished:", order.id);
+
+        return res.status(200).json({
+            success: true,
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            keyId: process.env.RAZORPAY_KEY_ID
+        });
+
+    } catch (err) {
+        console.error("ORDER ERROR:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Failed to initialize payment order."
+        });
+   
             }
         }
 
