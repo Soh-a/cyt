@@ -1,80 +1,118 @@
-const express = require('express');
-const cors = require('cors');
-const admin = require("firebase-admin"); // only once
-const cron = require('node-cron');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const admin = require("firebase-admin");
+const cron = require("node-cron");
 
 const app = express();
 
-app.use(cors());
+// ----------------------
+// CORS Configuration
+// ----------------------
+const allowedOrigins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:5500",
+    process.env.feeguio.vercel.app // e.g., https://your-vercel-domain.vercel.app
+].filter(Boolean);
+
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("CORS validation failed for origin."));
+        }
+    },
+    credentials: true
+}));
+
 app.use(express.json());
 
 // ----------------------
 // Firebase Initialization
 // ----------------------
-admin.initializeApp({
-  credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  ),
-  databaseURL: process.env.FIREBASE_DB_URL
-});
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert(
+            JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+        ),
+        databaseURL: process.env.FIREBASE_DATABASE_URL || process.env.FIREBASE_DB_URL
+    });
+}
 
 const db = admin.database();
 
 // ----------------------
 // Routes Import
 // ----------------------
-const authRoutes = require('./routes/auth');
-const paymentRoutes = require('./routes/payment');
-const fineRoutes = require('./routes/fine');
-const studentsRoutes = require('./routes/students');
-
-
+const authRoutes = require("./routes/auth");
+const paymentRoutes = require("./routes/payment");
+const fineRoutes = require("./routes/fine");
+const studentsRoutes = require("./routes/students");
 
 // ----------------------
 // Routes Mount
 // ----------------------
-app.use('/api/students', studentsRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/payment', paymentRoutes);
-app.use('/api/fine', fineRoutes);
+app.use("/api/students", studentsRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/payment", paymentRoutes);
+app.use("/api/fine", fineRoutes);
+
+// Health check endpoint for Render monitoring
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // ----------------------
 // AUTO APPLY FINE SYSTEM
 // ----------------------
-cron.schedule('1 0 * * *', async () => {
+cron.schedule("1 0 * * *", async () => {
     console.log("Running daily fine check...");
 
-    const ref = db.ref("/");
-    const snapshot = await ref.once("value");
-    const data = snapshot.val();
-    if (!data) return;
+    try {
+        const ref = db.ref("students");
+        const snapshot = await ref.once("value");
+        const data = snapshot.val();
+        if (!data) return;
 
-    const months = [
-        "april", "may", "june", "july", "august", "september",
-        "october", "november", "december", "january", "february", "march"
-    ];
+        const months = [
+            "april", "may", "june", "july", "august", "september",
+            "october", "november", "december", "january", "february", "march"
+        ];
 
-    const today = new Date();
-    const currentDay = today.getDate();
+        const today = new Date();
+        const currentDay = today.getDate();
 
-    for (let studentId in data) {
-        const student = data[studentId];
-        if (!student.fees) continue;
+        for (let studentId in data) {
+            const student = data[studentId];
+            if (!student || !student.fees) continue;
 
-        months.forEach(month => {
-            const fee = student.fees[month];
-            if (!fee) return;
+            months.forEach(month => {
+                // Support variations like "August" or "agust" in legacy data
+                const feeKey = Object.keys(student.fees).find(k => {
+                    const clean = k.toLowerCase().trim();
+                    return clean.includes(month) || (month === "august" && clean.includes("agust"));
+                }) || month;
 
-            if (fee.status === "unpaid" && !fee.fineWaived) {
-                if (currentDay > 20 && fee.fine === 0) {
-                    db.ref(`${studentId}/fees/${month}`).update({
-                        fine: 500,
-                        fineAppliedDate: new Date().toISOString()
-                    });
-                    console.log(`Fine applied for ${studentId} - Month: ${month}`);
+                const fee = student.fees[feeKey];
+                if (!fee) return;
+
+                const rawStatus = fee.status || fee.paymentStatus || fee.isPaid;
+                const isPaid = rawStatus === true || String(rawStatus).toLowerCase().trim() === "paid";
+
+                if (!isPaid && !fee.fineWaived) {
+                    if (currentDay > 20 && Number(fee.fine || fee.lateFee || 0) === 0) {
+                        db.ref(`students/${studentId}/fees/${feeKey}`).update({
+                            fine: 500,
+                            fineAppliedDate: new Date().toISOString()
+                        });
+                        console.log(`Fine applied for ${studentId} - Month: ${feeKey}`);
+                    }
                 }
-            }
-        });
+            });
+        }
+    } catch (err) {
+        console.error("Error executing daily fine check:", err);
     }
 });
 
@@ -83,6 +121,5 @@ cron.schedule('1 0 * * *', async () => {
 // ----------------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Sai DRS Payment Security Server running on port ${PORT}`);
 });
-
