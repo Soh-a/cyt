@@ -5,10 +5,18 @@ const admin = require("firebase-admin");
 
 const router = express.Router();
 
+/* =========================================================
+   RAZORPAY
+========================================================= */
+
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
     key_secret: process.env.RAZORPAY_KEY_SECRET
 });
+
+/* =========================================================
+   MONTH ORDER
+========================================================= */
 
 const MONTHS_ORDER = [
     "april",
@@ -33,6 +41,7 @@ const CONVENIENCE_FEE = 15;
 
 function sanitizeMobile(mobile) {
     if (!mobile) return "";
+
     return String(mobile)
         .trim()
         .replace(/\D/g, "");
@@ -45,6 +54,7 @@ function normalizeMonth(month) {
         .toLowerCase()
         .trim();
 
+    /* Fix common August spelling mistake */
     if (clean.includes("agust")) {
         return "august";
     }
@@ -84,8 +94,8 @@ function isFeePaid(fee) {
     if (!fee) return false;
 
     return (
-        fee.status === "paid" ||
-        fee.paymentStatus === "paid" ||
+        String(fee.status || "").toLowerCase() === "paid" ||
+        String(fee.paymentStatus || "").toLowerCase() === "paid" ||
         fee.isPaid === true
     );
 }
@@ -96,7 +106,9 @@ function isFeePaid(fee) {
 ========================================================= */
 
 router.post("/order", async (req, res) => {
+
     try {
+
         const {
             mobile,
             month,
@@ -109,6 +121,10 @@ router.post("/order", async (req, res) => {
         console.log("Month:", month);
         console.log("Session:", session);
         console.log("=================================");
+
+        /* -----------------------------------------
+           SANITIZE INPUT
+        ----------------------------------------- */
 
         const cleanMobile =
             sanitizeMobile(mobile);
@@ -140,10 +156,11 @@ router.post("/order", async (req, res) => {
         }
 
         /* -----------------------------------------
-           FIREBASE STUDENT
+           FIREBASE
         ----------------------------------------- */
 
-        const db = admin.database();
+        const db =
+            admin.database();
 
         const studentRef =
             db.ref(`students/${cleanMobile}`);
@@ -177,6 +194,7 @@ router.post("/order", async (req, res) => {
             i < targetIndex;
             i++
         ) {
+
             const previousMonth =
                 MONTHS_ORDER[i];
 
@@ -190,6 +208,7 @@ router.post("/order", async (req, res) => {
                 rawFees[previousKey] || {};
 
             if (!isFeePaid(previousFee)) {
+
                 return res.status(400).json({
                     success: false,
                     message:
@@ -212,6 +231,7 @@ router.post("/order", async (req, res) => {
             rawFees[targetKey] || {};
 
         if (isFeePaid(currentFee)) {
+
             return res.status(400).json({
                 success: false,
                 message:
@@ -247,6 +267,7 @@ router.post("/order", async (req, res) => {
             CONVENIENCE_FEE;
 
         if (totalRupees <= 0) {
+
             return res.status(400).json({
                 success: false,
                 message:
@@ -258,12 +279,16 @@ router.post("/order", async (req, res) => {
             Math.round(totalRupees * 100);
 
         /* -----------------------------------------
-           RAZORPAY ORDER OPTIONS
+           RAZORPAY ORDER
         ----------------------------------------- */
 
         const options = {
-            amount: totalPaise,
-            currency: "INR",
+
+            amount:
+                totalPaise,
+
+            currency:
+                "INR",
 
             receipt:
                 `rcpt_${cleanMobile}_${targetMonth}_${Date.now()
@@ -271,6 +296,7 @@ router.post("/order", async (req, res) => {
                     .slice(-6)}`,
 
             notes: {
+
                 studentMobile:
                     cleanMobile,
 
@@ -307,6 +333,7 @@ router.post("/order", async (req, res) => {
         );
 
         return res.status(200).json({
+
             success: true,
 
             orderId:
@@ -343,6 +370,7 @@ router.post("/order", async (req, res) => {
 ========================================================= */
 
 router.post("/verify", async (req, res) => {
+
     try {
 
         const {
@@ -363,6 +391,10 @@ router.post("/verify", async (req, res) => {
             }
         );
 
+        /* -----------------------------------------
+           SANITIZE INPUT
+        ----------------------------------------- */
+
         const cleanMobile =
             sanitizeMobile(mobile);
 
@@ -380,6 +412,7 @@ router.post("/verify", async (req, res) => {
             !razorpay_payment_id ||
             !razorpay_signature
         ) {
+
             return res.status(400).json({
                 success: false,
                 message:
@@ -387,9 +420,9 @@ router.post("/verify", async (req, res) => {
             });
         }
 
-        /* -----------------------------------------
-           CREATE EXPECTED SIGNATURE
-        ----------------------------------------- */
+        /* =================================================
+           VERIFY RAZORPAY SIGNATURE
+        ================================================= */
 
         const generatedSignature =
             crypto
@@ -413,10 +446,6 @@ router.post("/verify", async (req, res) => {
                 razorpay_signature,
                 "utf8"
             );
-
-        /* -----------------------------------------
-           SAFE SIGNATURE COMPARISON
-        ----------------------------------------- */
 
         const isSignatureValid =
             generatedBuffer.length ===
@@ -443,9 +472,9 @@ router.post("/verify", async (req, res) => {
             "Razorpay signature verified."
         );
 
-        /* -----------------------------------------
-           FIND STUDENT
-        ----------------------------------------- */
+        /* =================================================
+           FIREBASE STUDENT
+        ================================================= */
 
         const db =
             admin.database();
@@ -457,6 +486,7 @@ router.post("/verify", async (req, res) => {
             await studentRef.once("value");
 
         if (!snapshot.exists()) {
+
             return res.status(404).json({
                 success: false,
                 message:
@@ -470,6 +500,10 @@ router.post("/verify", async (req, res) => {
         const rawFees =
             student.fees || {};
 
+        /* -----------------------------------------
+           FIND CORRECT FEE KEY
+        ----------------------------------------- */
+
         const targetKey =
             resolveFeeRecordKey(
                 rawFees,
@@ -479,32 +513,99 @@ router.post("/verify", async (req, res) => {
         const currentFee =
             rawFees[targetKey] || {};
 
-        /* -----------------------------------------
+        /* =================================================
            IDEMPOTENCY
-        ----------------------------------------- */
+        ================================================= */
 
         if (
             currentFee.razorpayPaymentId ===
                 razorpay_payment_id &&
-            currentFee.status === "paid"
+            isFeePaid(currentFee)
         ) {
 
             return res.status(200).json({
+
                 success: true,
+
                 message:
                     "Payment already processed.",
-                idempotent: true,
+
+                idempotent:
+                    true,
+
                 transactionId:
                     razorpay_payment_id
             });
         }
 
+        /* =================================================
+           FETCH PAYMENT DETAILS FROM RAZORPAY
+        ================================================= */
+
+        console.log(
+            "Fetching Razorpay payment details..."
+        );
+
+        const paymentDetails =
+            await razorpay.payments.fetch(
+                razorpay_payment_id
+            );
+
+        console.log(
+            "Payment details fetched."
+        );
+
         /* -----------------------------------------
-           CALCULATE FINAL AMOUNT
+           PAYMENT AMOUNT
         ----------------------------------------- */
 
+        const paidAmount =
+            Number(
+                paymentDetails.amount || 0
+            ) / 100;
+
+        /* -----------------------------------------
+           PAYMENT METHOD
+        ----------------------------------------- */
+
+        const paymentMethod =
+            paymentDetails.method
+                ? String(
+                    paymentDetails.method
+                ).toUpperCase()
+                : "RAZORPAY";
+
+        /* =================================================
+           OPTIONAL PAYMENT STATUS CHECK
+        ================================================= */
+
+        if (
+            paymentDetails.status &&
+            paymentDetails.status !== "captured"
+        ) {
+
+            console.error(
+                "PAYMENT NOT CAPTURED:",
+                paymentDetails.status
+            );
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    `Payment is not captured. Current status: ${paymentDetails.status}`
+            });
+        }
+
+        /* =================================================
+           CALCULATE EXPECTED AMOUNT
+        ================================================= */
+
         const monthlyFee =
-            Number(student.monthlyfee || 0);
+            Number(
+                student.monthlyfee || 0
+            );
 
         const lateFee =
             Number(
@@ -520,27 +621,83 @@ router.post("/verify", async (req, res) => {
                 0
             );
 
-        const finalAmount =
+        const expectedAmount =
             monthlyFee +
             lateFee +
             activityFee +
             CONVENIENCE_FEE;
 
-        /* -----------------------------------------
-           FIREBASE UPDATE
-        ----------------------------------------- */
+        /* =================================================
+           AMOUNT VALIDATION
+        ================================================= */
+
+        if (
+            Math.round(paidAmount * 100) !==
+            Math.round(expectedAmount * 100)
+        ) {
+
+            console.error(
+                "PAYMENT AMOUNT MISMATCH"
+            );
+
+            console.error(
+                "Expected:",
+                expectedAmount
+            );
+
+            console.error(
+                "Received:",
+                paidAmount
+            );
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Payment amount does not match the required fee amount."
+            });
+        }
+
+        /* =================================================
+           RECEIPT NUMBER
+        ================================================= */
+
+        const receiptNo =
+            `SDRS-${new Date().getFullYear()}-${Date.now()
+                .toString()
+                .slice(-6)}`;
+
+        /* =================================================
+           RAZORPAY PAYMENT LINK
+        ================================================= */
+
+        const paymentIdLink =
+            `https://dashboard.razorpay.com/app/payments/${razorpay_payment_id}`;
+
+        /* =================================================
+           TIMESTAMP
+        ================================================= */
 
         const timestamp =
             Date.now();
+
+        /* =================================================
+           FIREBASE BASE PATH
+        ================================================= */
 
         const basePath =
             `students/${cleanMobile}/fees/${targetKey}`;
 
         const updates = {};
 
+        /* =================================================
+           PAYMENT STATUS
+        ================================================= */
+
         updates[
             `${basePath}/status`
-        ] = "paid";
+        ] = "Paid";
 
         updates[
             `${basePath}/paymentStatus`
@@ -549,6 +706,62 @@ router.post("/verify", async (req, res) => {
         updates[
             `${basePath}/isPaid`
         ] = true;
+
+        /* =================================================
+           ACADEMIC YEAR
+        ================================================= */
+
+        updates[
+            `${basePath}/academicYear`
+        ] = "2026-27";
+
+        /* =================================================
+           MONTH
+        ================================================= */
+
+        updates[
+            `${basePath}/month`
+        ] = targetMonth;
+
+        /* =================================================
+           AMOUNT
+        ================================================= */
+
+        updates[
+            `${basePath}/amount`
+        ] = paidAmount;
+
+        /* =================================================
+           FEE BREAKDOWN
+        ================================================= */
+
+        updates[
+            `${basePath}/monthlyFee`
+        ] = monthlyFee;
+
+        updates[
+            `${basePath}/lateFee`
+        ] = lateFee;
+
+        updates[
+            `${basePath}/activityFee`
+        ] = activityFee;
+
+        updates[
+            `${basePath}/convenienceFee`
+        ] = CONVENIENCE_FEE;
+
+        /* =================================================
+           COLLECTION INFORMATION
+        ================================================= */
+
+        updates[
+            `${basePath}/collectedBy`
+        ] = "Razorpay";
+
+        /* =================================================
+           RAZORPAY INFORMATION
+        ================================================= */
 
         updates[
             `${basePath}/razorpayOrderId`
@@ -562,21 +775,50 @@ router.post("/verify", async (req, res) => {
             `${basePath}/transactionId`
         ] = razorpay_payment_id;
 
+        /* =================================================
+           UPI REFERENCE
+        ================================================= */
+
         updates[
             `${basePath}/upiRefId`
-        ] = razorpay_payment_id;
+        ] =
+            paymentDetails.vpa || "";
+
+        /* =================================================
+           PAYMENT LINK
+        ================================================= */
+
+        updates[
+            `${basePath}/paymentIdLink`
+        ] = paymentIdLink;
+
+        /* =================================================
+           PAYMENT METHOD
+        ================================================= */
 
         updates[
             `${basePath}/paymentMode`
-        ] = "Online/Razorpay";
+        ] = paymentMethod;
+
+        /* =================================================
+           RECEIPT
+        ================================================= */
 
         updates[
-            `${basePath}/convenienceFee`
-        ] = CONVENIENCE_FEE;
+            `${basePath}/receiptNo`
+        ] = receiptNo;
+
+        /* =================================================
+           REMARKS
+        ================================================= */
 
         updates[
-            `${basePath}/amount`
-        ] = finalAmount;
+            `${basePath}/remarks`
+        ] = "Online fee payment via Razorpay";
+
+        /* =================================================
+           DATES
+        ================================================= */
 
         updates[
             `${basePath}/paidAt`
@@ -586,9 +828,26 @@ router.post("/verify", async (req, res) => {
             `${basePath}/transactionDate`
         ] = timestamp;
 
+        /* =================================================
+           PAYMENT STATUS FROM RAZORPAY
+        ================================================= */
+
+        updates[
+            `${basePath}/razorpayStatus`
+        ] =
+            paymentDetails.status || "captured";
+
+        /* =================================================
+           UPDATE FIREBASE
+        ================================================= */
+
         await db
             .ref()
             .update(updates);
+
+        /* =================================================
+           SUCCESS LOG
+        ================================================= */
 
         console.log(
             "================================="
@@ -614,20 +873,61 @@ router.post("/verify", async (req, res) => {
         );
 
         console.log(
+            "Payment Method:",
+            paymentMethod
+        );
+
+        console.log(
             "Amount:",
-            finalAmount
+            paidAmount
+        );
+
+        console.log(
+            "Receipt:",
+            receiptNo
         );
 
         console.log(
             "================================="
         );
 
+        /* =================================================
+           RESPONSE
+        ================================================= */
+
         return res.status(200).json({
+
             success: true,
+
             message:
                 "Payment verified and recorded successfully.",
+
             transactionId:
-                razorpay_payment_id
+                razorpay_payment_id,
+
+            paymentId:
+                razorpay_payment_id,
+
+            orderId:
+                razorpay_order_id,
+
+            receiptNo:
+                receiptNo,
+
+            amount:
+                paidAmount,
+
+            paymentMode:
+                paymentMethod,
+
+            month:
+                targetMonth,
+
+            academicYear:
+                "2026-27",
+
+            paymentIdLink:
+                paymentIdLink
         });
 
     } catch (error) {
@@ -638,13 +938,14 @@ router.post("/verify", async (req, res) => {
         );
 
         return res.status(500).json({
+
             success: false,
+
             message:
                 "Server error while processing payment verification."
         });
     }
 });
-
 
 /* =========================================================
    EXPORT ROUTER
